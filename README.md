@@ -1,10 +1,6 @@
-# Claw Suite
 
-This repository hosts tools that power your Kali assistant workflows.
 
-## Projects
-
-### `invoice-portal`
+# Invoice Creator
 A React single-page app deployed on S3 + CloudFront that lets you:
 - Sign in with Google (restricted to your Gmail account).
 - Generate invoices, export PDFs, and log entries into Google Sheets.
@@ -15,9 +11,6 @@ Key directories:
 - `infra/site.yaml` – CloudFormation template for the S3 static site bucket.
 - `deploy.sh` – Helper script to deploy the stack and upload the build.
 - `.env.example` – Environment variables required for Google auth + Sheets.
-
-### `dashboard` (coming soon)
-A task/status dashboard with Gantt view and usage metrics. (To be added.)
 
 ---
 
