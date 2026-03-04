@@ -8,6 +8,7 @@ import CompanyProfile from './components/CompanyProfile';
 import ProfileDrawer from './components/ProfileDrawer';
 import { APP_VERSION } from './version';
 import { CONFIG, GOOGLE_SCOPES } from './config';
+const LOGO_MAP = import.meta.glob('./assets/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default', query: '?inline' });
 import {
   appendInvoice,
   fetchExistingInvoices,
@@ -183,8 +184,9 @@ function App() {
     return (
       <>
         <div className="auth-card">
-          <h1>Secure Invoice Console</h1>
+          {CONFIG.companyLogo && <img src={LOGO_MAP[`./assets/${CONFIG.companyLogo}`]} alt="Logo" width="300" />}
           <p>Sign in with the authorized Google account to continue.</p>
+
           <button onClick={() => requestAccessToken('consent')}>Sign in with Google</button>
           {auth.error && <div className="notice error">{auth.error}</div>}
         </div>
@@ -539,23 +541,23 @@ function App() {
           setDrawerOpen(false);
           try {
             revokeAccessToken(auth.token);
-          } catch {}
+          } catch (e) { void e }
           try {
             clearSession();
-          } catch {}
+          } catch (e) { void e }
           requestAccessToken({ prompt: 'consent', scope: GOOGLE_SCOPES.join(' ') });
         }}
         onRateChange={(val) => {
           setEurToAed(val);
           try {
             sessionStorage.setItem('eur_to_aed', val ?? '');
-          } catch {}
+          } catch (e) { void e }
         }}
         onRateReset={() => {
           setEurToAed(String(CONFIG.eurToAed));
           try {
             sessionStorage.removeItem('eur_to_aed');
-          } catch {}
+          } catch (e) { void e }
         }}
         onCompanyProfile={() => {
           setView('company');

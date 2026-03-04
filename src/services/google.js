@@ -325,6 +325,8 @@ export async function fetchCompanyConfig(token) {
     },
     registration_no: map.registration_no || '',
     bookkeeping_email: map.bookkeeping_email || '',
+    logo_display: (map.logo_display || 'logo').toLowerCase(), // 'logo' | 'text'
+    logo_name: map.logo_name || 'logo_3d.png',
   };
   if (!company.name && !company.address && !company.bank.iban) return null;
   return company;
@@ -450,6 +452,8 @@ export async function saveCompanyConfig(token, company) {
     ['beneficiary', company.bank?.beneficiary || ''],
     ['registration_no', company.registration_no || ''],
     ['bookkeeping_email', company.bookkeeping_email || ''],
+    ['logo_display', (company.logo_display || 'logo').toLowerCase()],
+    ['logo_name', company.logo_name || 'logo_3d.png'],
   ];
   const range = `${companyTab}!A1:B${rows.length}`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;

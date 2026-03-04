@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import dayjs from 'dayjs';
 import { CONFIG } from '../config';
+const LOGO_MAP = import.meta.glob('../assets/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default', query: '?inline' });
 
 function createInvoiceDoc(invoice, companyOverride) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -18,18 +19,20 @@ function createInvoiceDoc(invoice, companyOverride) {
   doc.setFontSize(20);
   doc.text('INVOICE', margin, 36);
   doc.setTextColor(15, 23, 42);
+  const logoData = CONFIG.companyLogo && LOGO_MAP[`../assets/${CONFIG.companyLogo}`] ? LOGO_MAP[`../assets/${CONFIG.companyLogo}`] : null;
+  const headerY = 90;
+  let logoW = 120;
+  let logoH = 120;
+  if (CONFIG.companyLogo && logoData) {
+    try {
+      doc.addImage(logoData, 'PNG', margin-10, headerY-30, logoW, logoH);
+    } catch (e) {
+      void e;
+    }
+  }
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  cursorY = 70;
-  doc.text(companyCfg.name, margin, cursorY);
-  if (companyCfg.registration_no) {
-    doc.text(`Registration No: ${companyCfg.registration_no}`, margin, cursorY += lineHeight);
-  }
-  const addressLines = (companyCfg.address || '').split('\n');
-  addressLines.forEach((l, idx) => {
-    doc.text(l, margin, cursorY + lineHeight * (idx + 1));
-  });
 
   const metaX = 360;
   const metaY = 70;
@@ -45,17 +48,23 @@ function createInvoiceDoc(invoice, companyOverride) {
   doc.text(`Due date: ${dayjs(invoice.dueDate).format('YYYY-MM-DD')}`, metaX + 12, metaY + 36 + lineHeight * 2);
   doc.text(`Currency: ${invoice.currency}`, metaX + 12, metaY + 36 + lineHeight * 3);
 
-  cursorY = Math.max(cursorY + lineHeight * (addressLines.length + 2), metaY + metaH + 16);
+  const hasLogo = Boolean(CONFIG.companyLogo && logoData);
+  const billX = hasLogo ? (margin - 10 + logoW + 50) : margin;
+  const billY = headerY;
   doc.setFont('helvetica', 'bold');
-  doc.text('Bill To', margin, cursorY);
+  doc.text('Bill To', billX, billY);
   doc.setFont('helvetica', 'normal');
   const customer = invoice.customer;
   const customerLines = [customer.name, customer.email, customer.address].filter(Boolean);
   customerLines.forEach((line, index) => {
-    doc.text(line, margin, cursorY + lineHeight * (index + 1));
+    doc.text(line, billX, billY + lineHeight * (index + 1));
   });
 
-  cursorY += lineHeight * (customerLines.length + 2);
+  const billBottom = billY + lineHeight * (customerLines.length + 1);
+  const headerBottom = Math.max(hasLogo ? (headerY - 30 + logoH) : headerY, metaY + metaH, billBottom);
+  cursorY = headerBottom + 16;
+
+  cursorY += lineHeight * (0 + 2);
   const tableBody = invoice.items.map((item, idx) => [
     idx + 1,
     item.description,
@@ -99,16 +108,28 @@ function createInvoiceDoc(invoice, companyOverride) {
     doc.text(line[1], sumBoxX + sumBoxW - 12, y, { align: 'right' });
   });
 
+  let notesBottom = 0;
   if (invoice.notes) {
     const notesY = sumBoxY + lineHeight * (items.length + 3);
     doc.setFont('helvetica', 'bold');
     doc.text('Notes', margin, notesY);
     doc.setFont('helvetica', 'normal');
     doc.text(invoice.notes, margin, notesY + lineHeight, { maxWidth: 450 });
+    notesBottom = notesY + lineHeight;
   }
 
+  const contentBottom = Math.max(sumBoxY + lineHeight * (items.length + 2), notesBottom);
+  const addrLines = (companyCfg.address || '').split('\n').filter(Boolean);
+  const payableLines = 3 + (companyCfg.bank?.beneficiary ? 1 : 0);
+  const payableHeight = lineHeight * payableLines;
+  const companyDetailsHeight = 8 + lineHeight + (companyCfg.registration_no ? lineHeight : 0) + addrLines.length * lineHeight;
+  const footerBlockHeight = payableHeight + companyDetailsHeight;
+
   const pageHeight = doc.internal.pageSize.getHeight();
-  const footerY = pageHeight - margin - lineHeight * 3;
+  let footerY = pageHeight - margin - footerBlockHeight;
+  const minFooterY = contentBottom + lineHeight * 2;
+  if (footerY < minFooterY) footerY = minFooterY;
+
   doc.setDrawColor(226, 232, 240);
   doc.line(margin, footerY - lineHeight, doc.internal.pageSize.getWidth() - margin, footerY - lineHeight);
   doc.setFont('helvetica', 'bold');
@@ -121,6 +142,18 @@ function createInvoiceDoc(invoice, companyOverride) {
     doc.text(`Beneficiary: ${companyCfg.bank.beneficiary}`, margin + 220, footerY + lineHeight);
   }
 
+  const detailsY = footerY + payableHeight + 8;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Company Details', margin, detailsY);
+  doc.setFont('helvetica', 'normal');
+  let y = detailsY + lineHeight;
+  if (companyCfg.registration_no) {
+    doc.text(`Registration No: ${companyCfg.registration_no}`, margin, y);
+    y += lineHeight;
+  }
+  addrLines.forEach((l, idx) => {
+    if (l) doc.text(l, margin, y + lineHeight * idx);
+  });
 
   const filename = `Invoice-${invoice.invoiceNumber}.pdf`;
   return { doc, filename };

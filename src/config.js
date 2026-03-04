@@ -7,6 +7,7 @@ export const CONFIG = {
   companyTab: import.meta.env.VITE_COMPANY_TAB || 'Company',
   currency: import.meta.env.VITE_DEFAULT_CURRENCY || 'EUR',
   eurToAed: parseFloat(import.meta.env.VITE_EUR_TO_AED) || 4.0,
+  companyLogo: import.meta.env.VITE_COMPANY_LOGO || false,
 };
 
 export const GOOGLE_SCOPES = [

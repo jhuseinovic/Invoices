@@ -9,6 +9,8 @@ export default function CompanyProfile({ company, onSave, saving }) {
   const [beneficiary, setBeneficiary] = useState(company?.bank?.beneficiary || '');
   const [registrationNo, setRegistrationNo] = useState(company?.registration_no || '');
   const [bookkeepingEmail, setBookkeepingEmail] = useState(company?.bookkeeping_email || '');
+  const [logoDisplay, setLogoDisplay] = useState((company?.logo_display || 'logo').toLowerCase());
+  const [logoName, setLogoName] = useState(company?.logo_name || 'logo_3d.png');
 
   useEffect(() => {
     setName(company?.name || '');
@@ -18,6 +20,8 @@ export default function CompanyProfile({ company, onSave, saving }) {
     setBeneficiary(company?.bank?.beneficiary || '');
     setRegistrationNo(company?.registration_no || '');
     setBookkeepingEmail(company?.bookkeeping_email || '');
+    setLogoDisplay((company?.logo_display || 'logo').toLowerCase());
+    setLogoName(company?.logo_name || 'logo_3d.png');
   }, [company]);
 
   return (
@@ -55,6 +59,17 @@ export default function CompanyProfile({ company, onSave, saving }) {
           Bookkeeping Email (BCC)
           <input type="email" value={bookkeepingEmail} onChange={(e) => setBookkeepingEmail(e.target.value)} />
         </label>
+        <label>
+          Header Display
+          <select value={logoDisplay} onChange={(e) => setLogoDisplay(e.target.value)}>
+            <option value="logo">Logo + text</option>
+            <option value="text">Text only</option>
+          </select>
+        </label>
+        <label>
+          Logo file name
+          <input value={logoName} onChange={(e) => setLogoName(e.target.value)} placeholder="e.g. logo_3d.png" />
+        </label>
 
         <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
           <button
@@ -64,6 +79,8 @@ export default function CompanyProfile({ company, onSave, saving }) {
                 address,
                 registration_no: registrationNo,
                 bookkeeping_email: bookkeepingEmail,
+                logo_display: logoDisplay,
+                logo_name: logoName,
                 bank: { iban, swift, beneficiary },
               })
             }
