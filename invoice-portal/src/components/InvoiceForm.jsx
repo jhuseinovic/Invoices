@@ -13,7 +13,7 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
   const [customer, setCustomer] = useState({ name: '', email: '', address: '' });
 
   const [items, setItems] = useState([{ ...EMPTY_ITEM }]);
-  const [taxRate, setTaxRate] = useState(5);
+  const [taxRate, setTaxRate] = useState(0);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('Draft');
 
@@ -101,9 +101,8 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
       <section className="panel">
         <header>
           <h2>Invoice Details</h2>
-          <p>Authenticated as: {CONFIG.authorizedEmail}</p>
         </header>
-        <div className="grid two">
+        <div className="grid two invoice-details">
           <label>
             Invoice #
             <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} required />
@@ -137,8 +136,11 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
             </select>
           </label>
           <label>
-            Tax %
-            <input type="number" min="0" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+            Tax
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <input type="number" min="0" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+              <span>%</span>
+            </div>
           </label>
         </div>
       </section>
@@ -220,6 +222,7 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
           <h2>Notes</h2>
         </header>
         <textarea
+          className="textarea-plain"
           placeholder="Payment terms, thank you message, etc."
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

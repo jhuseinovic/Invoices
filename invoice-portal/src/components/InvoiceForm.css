@@ -26,6 +26,18 @@
   gap: 1rem;
 }
 
+.invoice-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .invoice-details {
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+  }
+}
+
 .grid.one label,
 .grid.two label {
   display: flex;

@@ -5,7 +5,9 @@ import Dashboard from './components/Dashboard';
 import InvoicesTable from './components/InvoicesTable';
 import CostsPanel from './components/CostsPanel';
 import CompanyProfile from './components/CompanyProfile';
-import { CONFIG } from './config';
+import ProfileDrawer from './components/ProfileDrawer';
+import { APP_VERSION } from './version';
+import { CONFIG, GOOGLE_SCOPES } from './config';
 import {
   appendInvoice,
   fetchExistingInvoices,
@@ -31,6 +33,9 @@ import {
   updateInvoiceRow,
   saveCompanyConfig,
   sendInvoiceEmail,
+  updateCostRow,
+  clearCostRow,
+  fetchTokenInfo,
 } from './services/google';
 
 const REQUIRED_ENVS = ['VITE_GOOGLE_CLIENT_ID', 'VITE_SHEETS_ID', 'VITE_AUTHORIZED_EMAIL'];
@@ -49,6 +54,13 @@ function App() {
   const [company, setCompany] = useState(CONFIG.company);
   const [editingRow, setEditingRow] = useState(null);
   const [companySaving, setCompanySaving] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [eurToAed, setEurToAed] = useState(() => {
+    const saved = sessionStorage.getItem('eur_to_aed');
+    return saved != null ? String(saved) : String(CONFIG.eurToAed);
+  });
+  const [hasDrive, setHasDrive] = useState(false);
+  const [tokenScopes, setTokenScopes] = useState([]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -109,6 +121,11 @@ function App() {
         setCosts(parseCostsRows(costRows));
         const companyCfg = await fetchCompanyConfig(auth.token);
         if (companyCfg) setCompany(companyCfg);
+        const info = await fetchTokenInfo(auth.token);
+        if (info) {
+          setTokenScopes(info.scopes);
+          setHasDrive(info.scopes.includes('https://www.googleapis.com/auth/drive.file') || info.scopes.includes('https://www.googleapis.com/auth/drive'));
+        }
       } catch (error) {
         setStatusMessage({ type: 'error', text: error.message });
       } finally {
@@ -164,12 +181,19 @@ function App() {
 
   if (!signedIn) {
     return (
-      <div className="auth-card">
-        <h1>Secure Invoice Console</h1>
-        <p>Sign in with the authorized Google account to continue.</p>
-        <button onClick={() => requestAccessToken('consent')}>Sign in with Google</button>
-        {auth.error && <div className="notice error">{auth.error}</div>}
-      </div>
+      <>
+        <div className="auth-card">
+          <h1>Secure Invoice Console</h1>
+          <p>Sign in with the authorized Google account to continue.</p>
+          <button onClick={() => requestAccessToken('consent')}>Sign in with Google</button>
+          {auth.error && <div className="notice error">{auth.error}</div>}
+        </div>
+        <div className="version-badge">
+          {APP_VERSION ? `Version ${APP_VERSION}` : 'Version'}
+          {' \u2022 '}
+          {`Huseinovic \u00A9 ${new Date().getFullYear() === 2026 ? '2026' : `2026–${new Date().getFullYear()}`}`}
+        </div>
+      </>
     );
   }
 
@@ -177,13 +201,12 @@ function App() {
     <main>
       <header className="app-header">
         <div>
-          <h1>Invoice Generator</h1>
-          <p>Signed in as {auth.profile.email}</p>
+          <h1>{company?.name ? `${company.name} Invoices` : 'Invoice Generator'}</h1>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="ghost" onClick={() => setView('company')}>Company Profile</button>
-          <button onClick={handleSignOut}>Sign out</button>
-        </div>
+        <button className="profile-btn ghost" onClick={() => setDrawerOpen(true)} title="Configure and settings">
+          <span aria-hidden>⚙️</span>
+          Configure
+        </button>
       </header>
 
       {statusMessage && (
@@ -226,11 +249,12 @@ function App() {
         </div>
       )}
 
-      {view === 'dashboard' && <Dashboard invoices={invoices} costs={costs} />}
+      {view === 'dashboard' && <Dashboard invoices={invoices} costs={costs} eurToAed={parseFloat(eurToAed) || 0} />}
 
       {view === 'invoices' && (
         <InvoicesTable
           invoices={invoices}
+          eurToAed={parseFloat(eurToAed) || 0}
           onNew={() => setView('new')}
           onClone={(inv) => {
             const today = new Date();
@@ -369,6 +393,9 @@ function App() {
           }}
           onDelete={async (inv) => {
             try {
+              if (!window.confirm(`Are you sure you wish to delete invoice ${inv.invoiceNumber}?`)) {
+                return;
+              }
               await clearInvoiceRow(auth.token, inv.__rowIndex);
               const rows = await fetchExistingInvoices(auth.token);
               setCustomers(dedupeCustomers(rows));
@@ -417,9 +444,17 @@ function App() {
         <CostsPanel
           costs={costs}
           uploading={uploadingCost}
-          onAddCost={async ({ date, vendor, category, amount, currency, notes, file }) => {
+          hasDrive={hasDrive}
+          onReauth={() => requestAccessToken({ prompt: 'consent', scope: GOOGLE_SCOPES.join(' ') })}
+          eurToAed={parseFloat(eurToAed) || 0}
+          onSaveCost={async ({ date, vendor, category, amount, currency, eurRate, notes, file, rowIndex }) => {
             try {
               setUploadingCost(true);
+              if (file && !hasDrive) {
+                setStatusMessage({ type: 'error', text: 'Google Drive access not granted. Re‑authenticate and try again.' });
+                requestAccessToken({ prompt: 'consent', scope: GOOGLE_SCOPES.join(' ') });
+                return;
+              }
               let fileId = '';
               let fileName = '';
               let fileLink = '';
@@ -437,20 +472,38 @@ function App() {
                 category,
                 amount,
                 currency,
+                eurRate || '',
                 notes || '',
                 fileId,
                 fileName,
                 fileLink,
               ];
-              await appendCost(auth.token, row);
+              if (rowIndex) {
+                await updateCostRow(auth.token, rowIndex, row);
+              } else {
+                await appendCost(auth.token, row);
+              }
               const costRows = await fetchCostsRows(auth.token);
               setCosts(parseCostsRows(costRows));
-              setStatusMessage({ type: 'success', text: 'Cost saved.' });
+              setStatusMessage({ type: 'success', text: rowIndex ? 'Cost updated.' : 'Cost saved.' });
             } catch (error) {
               setStatusMessage({ type: 'error', text: error.message });
               throw error;
             } finally {
               setUploadingCost(false);
+            }
+          }}
+          onDeleteCost={async (rowIndex) => {
+            try {
+              if (!window.confirm('Are you sure you wish to delete this Cost?')) {
+                return;
+              }
+              await clearCostRow(auth.token, rowIndex);
+              const costRows = await fetchCostsRows(auth.token);
+              setCosts(parseCostsRows(costRows));
+              setStatusMessage({ type: 'success', text: 'Cost deleted.' });
+            } catch (error) {
+              setStatusMessage({ type: 'error', text: error.message });
             }
           }}
         />
@@ -474,6 +527,42 @@ function App() {
           }}
         />
       )}
+
+      <ProfileDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        profile={auth.profile}
+        eurToAed={eurToAed}
+        driveGranted={hasDrive}
+        scopes={tokenScopes}
+        onReauth={() => {
+          setDrawerOpen(false);
+          try {
+            revokeAccessToken(auth.token);
+          } catch {}
+          try {
+            clearSession();
+          } catch {}
+          requestAccessToken({ prompt: 'consent', scope: GOOGLE_SCOPES.join(' ') });
+        }}
+        onRateChange={(val) => {
+          setEurToAed(val);
+          try {
+            sessionStorage.setItem('eur_to_aed', val ?? '');
+          } catch {}
+        }}
+        onRateReset={() => {
+          setEurToAed(String(CONFIG.eurToAed));
+          try {
+            sessionStorage.removeItem('eur_to_aed');
+          } catch {}
+        }}
+        onCompanyProfile={() => {
+          setView('company');
+          setDrawerOpen(false);
+        }}
+        onSignOut={handleSignOut}
+      />
     </main>
   );
 }

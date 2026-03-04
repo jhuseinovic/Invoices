@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import dayjs from 'dayjs';
 import './InvoiceForm.css';
 
-export default function InvoicesTable({ invoices, onClone, onNew, onMarkPaid, onSend, onCancel, onDelete, onDownload, onEdit, onResend }) {
+export default function InvoicesTable({ invoices, onClone, onNew, onMarkPaid, onSend, onCancel, onDelete, onDownload, onEdit, onResend, eurToAed = 0 }) {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState('issueDate');
   const [dir, setDir] = useState('desc');
@@ -90,7 +90,14 @@ export default function InvoicesTable({ invoices, onClone, onNew, onMarkPaid, on
                   <div>{i.customer?.name}</div>
                   <div style={{ color: '#64748b', fontSize: '0.85rem' }}>{i.customer?.email}</div>
                 </td>
-                <td>{fmt(i.total, i.currency)}</td>
+                <td>
+                  <div>{fmt(i.total, i.currency)}</div>
+                  {i.currency?.toUpperCase() === 'EUR' && eurToAed > 0 && (
+                    <div style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                      ≈ {fmt((Number(i.total) || 0) * eurToAed, 'AED')} @ {eurToAed}
+                    </div>
+                  )}
+                </td>
                 <td>
                   <div>{i.status}</div>
                   {i.paidDate && <div style={{ color: '#64748b', fontSize: '0.85rem' }}>Paid: {dispDate(i.paidDate)}</div>}

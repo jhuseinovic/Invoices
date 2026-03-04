@@ -1,67 +1,25 @@
 import dayjs from 'dayjs';
-import { useEffect, useState } from 'react';
-import { CONFIG } from '../config';
 import Charts from './Charts';
 import './InvoiceForm.css';
 
-export default function Dashboard({ invoices, costs }) {
+export default function Dashboard({ invoices, costs, eurToAed }) {
   const totalProfit = sum(invoices.map((i) => i.total));
   const annualProfit = sum(
     invoices.filter((i) => year(i.issueDate) === dayjs().year()).map((i) => i.total),
   );
   const last = latestInvoice(invoices);
   const lastPaid = latestPaid(invoices);
-  const [eurToAed, setEurToAed] = useState(() => {
-    const saved = sessionStorage.getItem('eur_to_aed');
-    return saved != null ? String(saved) : String(CONFIG.eurToAed);
-  });
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem('eur_to_aed', eurToAed ?? '');
-    } catch {
-      /* noop */
-    }
-  }, [eurToAed]);
-
-  const rateNum = parseFloat(eurToAed) || 0;
+  const rateNum = Number(eurToAed) || 0;
   const totalAED = toAED(invoices, rateNum);
   const annualAED = toAED(invoices.filter((i) => year(i.issueDate) === dayjs().year()), rateNum);
   const lastAmountAED = toAED(last ? [last] : [], rateNum);
-  const totalCosts = sum(costs.map((c) => toEURAmount(c.amount, c.currency, rateNum)));
-  const annualCosts = sum(costs.filter((c) => year(c.date) === dayjs().year()).map((c) => toEURAmount(c.amount, c.currency, rateNum)));
+  const totalCosts = sum(costs.map((c) => toEURAmountCost(c, rateNum)));
+  const annualCosts = sum(costs.filter((c) => year(c.date) === dayjs().year()).map((c) => toEURAmountCost(c, rateNum)));
 
   return (
     <section className="panel">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header>
         <h2 style={{ margin: 0 }}>Dashboard</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.9rem', color: '#64748b' }}>
-            EUR→AED
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={eurToAed}
-              onChange={(e) => setEurToAed(e.target.value)}
-              style={{ marginLeft: '0.5rem', width: 90 }}
-              title="Conversion rate for EUR to AED"
-            />
-          </label>
-          <button
-            className="ghost"
-            onClick={() => {
-              setEurToAed(String(CONFIG.eurToAed));
-              try {
-                sessionStorage.removeItem('eur_to_aed');
-              } catch {
-                /* noop */
-              }
-            }}
-          >
-            Reset
-          </button>
-        </div>
       </header>
       <div className="dashboard-cards">
         <Card title="Total Profit" value={fmt(totalProfit, last?.currency)} subValue={`≈ ${fmt(totalAED, 'AED')}`} />
@@ -142,8 +100,10 @@ function toAED(invoices, rate) {
 }
 
 function toEURAmount(amount, currency, eurToAed) {
-  if ((currency || '').toUpperCase() === 'EUR') return Number(amount) || 0;
-  if ((currency || '').toUpperCase() === 'AED') return (Number(amount) || 0) / (Number(eurToAed) || 1);
+  const amt = Number(amount) || 0;
+  const cur = (currency || '').toUpperCase();
+  if (cur === 'EUR') return amt;
+  if (cur === 'AED') return amt / (Number(eurToAed) || 1);
   return 0;
 }
 
@@ -165,7 +125,17 @@ function monthlySumsCostsEUR(costs, eurToAed) {
     const d = dayjs(c.date);
     if (!d.isValid() || d.year() !== dayjs().year()) return;
     const m = d.month();
-    arr[m] += toEURAmount(c.amount, c.currency, eurToAed);
+    arr[m] += toEURAmountCost(c, eurToAed);
   });
   return arr;
+}
+
+function toEURAmountCost(c, eurToAed) {
+  const amt = Number(c.amount) || 0;
+  const cur = (c.currency || '').toUpperCase();
+  if (cur === 'EUR') return amt;
+  const r = Number(c.eurRate) || 0;
+  if (r > 0) return amt * r;
+  if (cur === 'AED') return amt / (Number(eurToAed) || 1);
+  return 0;
 }

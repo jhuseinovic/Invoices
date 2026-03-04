@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFront distribution for S3 static website with SPA routing
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Existing S3 website bucket name (must already be configured for website hosting)
+  DomainName:
+    Type: String
+    Description: Custom domain for the site (e.g., invoices.example.com)
+  ACMCertificateArn:
+    Type: String
+    Description: ACM certificate ARN in us-east-1 for the above DomainName
+  PriceClass:
+    Type: String
+    Default: PriceClass_100
+    AllowedValues:
+      - PriceClass_100
+      - PriceClass_200
+      - PriceClass_All
+    Description: CloudFront price class
+
+Resources:
+  CDNDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'Static site CDN for ${DomainName}'
+        Aliases:
+          - !Ref DomainName
+        DefaultRootObject: index.html
+        Origins:
+          - DomainName: !Sub '${BucketName}.s3-website-${AWS::Region}.amazonaws.com'
+            Id: S3WebsiteOrigin
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginSSLProtocols:
+                - TLSv1.2
+        DefaultCacheBehavior:
+          TargetOriginId: S3WebsiteOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD, OPTIONS]
+          Compress: true
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: none
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+        ViewerCertificate:
+          AcmCertificateArn: !Ref ACMCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        PriceClass: !Ref PriceClass
+
+Outputs:
+  DistributionId:
+    Value: !Ref CDNDistribution
+    Description: CloudFront Distribution ID
+  DistributionDomainName:
+    Value: !GetAtt CDNDistribution.DomainName
+    Description: CloudFront domain name

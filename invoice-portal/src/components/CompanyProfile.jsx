@@ -26,7 +26,7 @@ export default function CompanyProfile({ company, onSave, saving }) {
         <h2>Company Profile</h2>
       </header>
       <div className="grid two">
-        <label>
+        <label style={{ gridColumn: 'span 2' }}>
           Name
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </label>
@@ -38,11 +38,8 @@ export default function CompanyProfile({ company, onSave, saving }) {
           Address
           <textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={4} />
         </label>
-        <label>
-          Bookkeeping Email (BCC)
-          <input type="email" value={bookkeepingEmail} onChange={(e) => setBookkeepingEmail(e.target.value)} />
-        </label>
-        <label>
+
+        <label style={{ gridColumn: 'span 2' }}>
           IBAN
           <input value={iban} onChange={(e) => setIban(e.target.value)} />
         </label>
@@ -54,6 +51,11 @@ export default function CompanyProfile({ company, onSave, saving }) {
           Beneficiary
           <input value={beneficiary} onChange={(e) => setBeneficiary(e.target.value)} />
         </label>
+        <label style={{ gridColumn: '1 / -1' }}>
+          Bookkeeping Email (BCC)
+          <input type="email" value={bookkeepingEmail} onChange={(e) => setBookkeepingEmail(e.target.value)} />
+        </label>
+
         <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
           <button
             onClick={() =>

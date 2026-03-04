@@ -29,6 +29,7 @@ const COSTS_HEADER = [
   'Category',
   'Amount',
   'Currency',
+  'EUR Rate',
   'Notes',
   'File ID',
   'File Name',
@@ -59,9 +60,19 @@ export async function initGoogleTokenClient(callback) {
   return tokenClient;
 }
 
-export function requestAccessToken(prompt = '') {
+export function requestAccessToken(options = '') {
   if (!tokenClient) throw new Error('Token client is not initialized.');
-  tokenClient.requestAccessToken({ prompt });
+  if (typeof options === 'string') {
+    tokenClient.requestAccessToken({ prompt: options });
+  } else if (options && typeof options === 'object') {
+    const { prompt, scope } = options;
+    const params = {};
+    if (prompt) params.prompt = prompt;
+    if (scope) params.scope = scope;
+    tokenClient.requestAccessToken(params);
+  } else {
+    tokenClient.requestAccessToken({});
+  }
 }
 
 export function revokeAccessToken(token) {
@@ -120,7 +131,7 @@ export async function ensureSheetHeader(token) {
 
 export async function ensureCostsHeader(token) {
   const { sheetId, costsTab } = CONFIG;
-  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${costsTab}!A1:J1`)}`;
+  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${costsTab}!A1:K1`)}`;
   const getResp = await fetch(getUrl, { headers: { Authorization: `Bearer ${token}` } });
   if (getResp.status === 404) {
     throw new Error('Costs tab not found. Create it or set VITE_COSTS_TAB.');
@@ -141,7 +152,7 @@ export async function ensureCostsHeader(token) {
     needUpdate = true;
   }
   if (!needUpdate) return true;
-  const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${costsTab}!A1:J1`)}?valueInputOption=USER_ENTERED`;
+  const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${costsTab}!A1:K1`)}?valueInputOption=USER_ENTERED`;
   const body = JSON.stringify({ values: [COSTS_HEADER] });
   const putResp = await fetch(putUrl, {
     method: 'PUT',
@@ -160,7 +171,7 @@ export async function ensureCostsHeader(token) {
 
 export async function fetchCostsRows(token) {
   const { sheetId, costsTab } = CONFIG;
-  const range = encodeURIComponent(`${costsTab}!A2:J`);
+  const range = encodeURIComponent(`${costsTab}!A2:K`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 404) throw new Error('Costs tab not found.');
@@ -173,9 +184,36 @@ export async function fetchCostsRows(token) {
   return data.values || [];
 }
 
+export async function fetchCostsRates(token) {
+  const { sheetId, costsTab } = CONFIG;
+  // Expect a horizontal table:
+  // Row 1: currency codes in headers starting at column L (e.g., L1=GBP, M1=USD, N1=AED, ...)
+  // Row 2: corresponding EUR rates (1 unit of code -> EUR), e.g., L2=1.17, M2=0.92, N2=0.25
+  // If not present, returns an empty map and dashboard falls back where applicable.
+  const range = encodeURIComponent(`${costsTab}!L1:ZZ2`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) return {};
+  const data = await response.json().catch(() => ({}));
+  const rows = data.values || [];
+  const map = {};
+  if (rows.length >= 2) {
+    const codes = rows[0] || [];
+    const rates = rows[1] || [];
+    for (let i = 0; i < codes.length; i++) {
+      const code = String(codes[i] || '').trim().toUpperCase();
+      const rate = parseFloat(rates[i] || '');
+      if (code && Number.isFinite(rate) && rate > 0) {
+        map[code] = rate;
+      }
+    }
+  }
+  return map;
+}
+
 export async function appendCost(token, rowValues) {
   const { sheetId, costsTab } = CONFIG;
-  const range = encodeURIComponent(`${costsTab}!A:J`);
+  const range = encodeURIComponent(`${costsTab}!A:K`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED`;
   const body = JSON.stringify({ values: [rowValues] });
   const response = await fetch(url, {
@@ -197,8 +235,11 @@ export async function findOrCreateCostsFolder(token) {
   const q = encodeURIComponent("name = 'Business Costs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
   const listUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`;
   let res = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status === 401 || res.status === 403) throw new Error('Drive access denied. Re-auth with consent.');
-  if (!res.ok) throw new Error('Unable to query Drive.');
+  if (res.status === 401 || res.status === 403) {
+    // Fallback: upload to root if we can't list files with current scope/policy
+    return null;
+  }
+  if (!res.ok) return null;
   const data = await res.json();
   if (data.files?.length) return data.files[0].id;
   const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
@@ -212,16 +253,18 @@ export async function findOrCreateCostsFolder(token) {
       mimeType: 'application/vnd.google-apps.folder',
     }),
   });
-  if (!createRes.ok) throw new Error('Unable to create Business Costs folder in Drive.');
+  if (!createRes.ok) {
+    // If folder cannot be created due to policy, fallback to root
+    return null;
+  }
   const created = await createRes.json();
   return created.id;
 }
 
 export async function uploadCostFile(token, file, folderId) {
-  const metadata = {
-    name: file.name,
-    parents: [folderId],
-  };
+  const metadata = folderId
+    ? { name: file.name, parents: [folderId] }
+    : { name: file.name };
   const boundary = '-------314159265358979323846';
   const delimiter = `\r\n--${boundary}\r\n`;
   const closeDelim = `\r\n--${boundary}--`;
@@ -234,11 +277,24 @@ export async function uploadCostFile(token, file, folderId) {
   const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink';
   const response = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': body.type,
+    },
     body,
   });
   if (!response.ok) {
-    throw new Error(response.statusText || 'Unable to upload file to Drive.');
+    let msg = 'Unable to upload file to Drive.';
+    try {
+      const err = await response.json();
+      msg = err.error?.message || msg;
+    } catch {
+      try {
+        const txt = await response.text();
+        if (txt) msg = txt;
+      } catch {}
+    }
+    throw new Error(msg);
   }
   return response.json();
 }
@@ -272,6 +328,15 @@ export async function fetchCompanyConfig(token) {
   };
   if (!company.name && !company.address && !company.bank.iban) return null;
   return company;
+}
+export async function fetchTokenInfo(token) {
+  const url = `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const data = await resp.json().catch(() => null);
+  if (!data) return null;
+  const scopes = (data.scope || '').split(/\s+/).filter(Boolean);
+  return { scopes };
 }
 export async function fetchExistingInvoices(token) {
   const { sheetId, sheetTab } = CONFIG;
@@ -453,4 +518,40 @@ export async function sendInvoiceEmail(token, { to, subject, text, fileName, fil
     throw new Error(err.error?.message || 'Failed to send email.');
   }
   return response.json();
+}
+
+export async function updateCostRow(token, rowNumber, rowValues) {
+  const { sheetId, costsTab } = CONFIG;
+  const range = `${costsTab}!A${rowNumber}:K${rowNumber}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+  const body = JSON.stringify({ values: [rowValues] });
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || 'Unable to update cost.');
+  }
+  return response.json();
+}
+
+export async function clearCostRow(token, rowNumber) {
+  const { sheetId, costsTab } = CONFIG;
+  const range = `${costsTab}!A${rowNumber}:K${rowNumber}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}:clear`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || 'Unable to delete cost row.');
+  }
+  return true;
 }
