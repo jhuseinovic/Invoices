@@ -5,7 +5,7 @@ import './InvoiceForm.css';
 
 const EMPTY_ITEM = { description: '', quantity: 1, rate: 0 };
 
-export default function InvoiceForm({ onSubmit, saving, customerOptions }) {
+export default function InvoiceForm({ onSubmit, saving, customerOptions, initialInvoice }) {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [issueDate, setIssueDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [dueDate, setDueDate] = useState(dayjs().add(14, 'day').format('YYYY-MM-DD'));
@@ -16,6 +16,21 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions }) {
   const [taxRate, setTaxRate] = useState(5);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('Draft');
+
+  useEffect(() => {
+    if (!initialInvoice) return;
+    setInvoiceNumber(initialInvoice.invoiceNumber || '');
+    setIssueDate(initialInvoice.issueDate || dayjs().format('YYYY-MM-DD'));
+    setDueDate(initialInvoice.dueDate || dayjs().add(14, 'day').format('YYYY-MM-DD'));
+    setCurrency(initialInvoice.currency || CONFIG.currency);
+    setCustomer(initialInvoice.customer || { name: '', email: '', address: '' });
+    setItems(initialInvoice.items?.length ? initialInvoice.items : [{ ...EMPTY_ITEM }]);
+    setTaxRate(
+      typeof initialInvoice.taxRate === 'number' ? initialInvoice.taxRate : (Number(initialInvoice.taxRate) || 5),
+    );
+    setNotes(initialInvoice.notes || '');
+    setStatus(initialInvoice.status || 'Draft');
+  }, [initialInvoice]);
 
   useEffect(() => {
     if (!customer.name) {
@@ -111,7 +126,15 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions }) {
           </label>
           <label>
             Currency
-            <input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} required />
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)} required>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="USD">USD</option>
+              <option value="AED">AED</option>
+              <option value="BAM">BAM</option>
+              <option value="ZAR">ZAR</option>
+              <option value="AUD">AUD</option>
+            </select>
           </label>
           <label>
             Tax %
@@ -210,7 +233,7 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions }) {
           <p>Total: <strong>{formatCurrency(total, currency)}</strong></p>
         </div>
         <button type="submit" disabled={saving}>
-          {saving ? 'Saving…' : 'Generate PDF & Save'}
+          {saving ? (<><span className="btn-spinner" />Saving…</>) : 'Generate PDF & Save'}
         </button>
       </section>
     </form>
