@@ -17,7 +17,7 @@ Single‑page app to generate invoices as PDFs and log them to Google Sheets. Au
 ## Prerequisites
 1. Google Cloud project with an OAuth 2.0 Client ID (Web).
 2. Enabled Google Sheets API.
-3. A Google Sheet to store invoices with a tab for data (default: `Invoices`).
+3. A Google Sheet to store invoices with a tab for data (default: `Invoices`). ([Sample File](https://docs.google.com/spreadsheets/d/e/2PACX-1vSfM8EiH0GhG6alhHtYiGcga1RlJBEK3c_yIpBEx_txBkmqhFDyj7F4OZjXXGP_SEZeim3nXRNynstZ/pub?output=xlsx))
 4. The email address that is allowed to use the console.
 
 ## Setup
