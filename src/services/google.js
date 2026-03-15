@@ -20,6 +20,7 @@ const HEADER_VALUES = [
   'Items JSON',
   'Notes',
   'Paid Date',
+  'Bill From JSON',
 ];
 
 const COSTS_HEADER = [
@@ -90,7 +91,7 @@ export async function fetchUserProfile(token) {
 
 export async function ensureSheetHeader(token) {
   const { sheetId, sheetTab } = CONFIG;
-  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${sheetTab}!A1:P1`)}`;
+  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${sheetTab}!A1:Q1`)}`;
   const getResp = await fetch(getUrl, { headers: { Authorization: `Bearer ${token}` } });
   if (getResp.status === 404) {
     throw new Error('Sheet/tab not found. Verify VITE_SHEETS_ID and VITE_SHEETS_TAB.');
@@ -112,7 +113,7 @@ export async function ensureSheetHeader(token) {
     needUpdate = true;
   }
   if (!needUpdate) return true;
-  const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${sheetTab}!A1:P1`)}?valueInputOption=USER_ENTERED`;
+  const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${sheetTab}!A1:Q1`)}?valueInputOption=USER_ENTERED`;
   const body = JSON.stringify({ values: [HEADER_VALUES] });
   const putResp = await fetch(putUrl, {
     method: 'PUT',
@@ -327,7 +328,12 @@ export async function fetchCompanyConfig(token) {
     bookkeeping_email: map.bookkeeping_email || '',
     logo_display: (map.logo_display || 'logo').toLowerCase(), // 'logo' | 'text'
     logo_name: map.logo_name || 'logo_3d.png',
+    profiles: [],
   };
+  try {
+    const parsed = JSON.parse(map.profiles_json || '[]');
+    if (Array.isArray(parsed)) company.profiles = parsed;
+  } catch {}
   if (!company.name && !company.address && !company.bank.iban) return null;
   return company;
 }
@@ -342,7 +348,7 @@ export async function fetchTokenInfo(token) {
 }
 export async function fetchExistingInvoices(token) {
   const { sheetId, sheetTab } = CONFIG;
-  const range = encodeURIComponent(`${sheetTab}!A2:P`);
+  const range = encodeURIComponent(`${sheetTab}!A2:Q`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`;
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -363,7 +369,7 @@ export async function fetchExistingInvoices(token) {
 
 export async function appendInvoice(token, rowValues) {
   const { sheetId, sheetTab } = CONFIG;
-  const range = encodeURIComponent(`${sheetTab}!A:P`);
+  const range = encodeURIComponent(`${sheetTab}!A:Q`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED`;
   const body = JSON.stringify({ values: [rowValues] });
   const response = await fetch(url, {
@@ -408,7 +414,7 @@ export async function updateInvoiceStatus(token, rowNumber, status, paidDate = '
 
 export async function clearInvoiceRow(token, rowNumber) {
   const { sheetId, sheetTab } = CONFIG;
-  const range = `${sheetTab}!A${rowNumber}:P${rowNumber}`;
+  const range = `${sheetTab}!A${rowNumber}:Q${rowNumber}`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}:clear`;
   const response = await fetch(url, {
     method: 'POST',
@@ -424,7 +430,7 @@ export async function clearInvoiceRow(token, rowNumber) {
 
 export async function updateInvoiceRow(token, rowNumber, rowValues) {
   const { sheetId, sheetTab } = CONFIG;
-  const range = `${sheetTab}!A${rowNumber}:P${rowNumber}`;
+  const range = `${sheetTab}!A${rowNumber}:Q${rowNumber}`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
   const body = JSON.stringify({ values: [rowValues] });
   const response = await fetch(url, {
@@ -454,6 +460,7 @@ export async function saveCompanyConfig(token, company) {
     ['bookkeeping_email', company.bookkeeping_email || ''],
     ['logo_display', (company.logo_display || 'logo').toLowerCase()],
     ['logo_name', company.logo_name || 'logo_3d.png'],
+    ['profiles_json', JSON.stringify(company.profiles || [])],
   ];
   const range = `${companyTab}!A1:B${rows.length}`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;

@@ -133,13 +133,15 @@ function createInvoiceDoc(invoice, companyOverride) {
   doc.setDrawColor(226, 232, 240);
   doc.line(margin, footerY - lineHeight, doc.internal.pageSize.getWidth() - margin, footerY - lineHeight);
   doc.setFont('helvetica', 'bold');
+  // const profileName = invoice.billFrom?.bankName || companyCfg.name;
   doc.text('Payable To', margin, footerY);
   doc.setFont('helvetica', 'normal');
   doc.text(companyCfg.name, margin, footerY + lineHeight);
-  doc.text(`IBAN: ${companyCfg.bank?.iban || ''}`, margin, footerY + lineHeight * 2);
-  doc.text(`SWIFT: ${companyCfg.bank?.swift || ''}`, margin + 220, footerY + lineHeight * 2);
-  if (companyCfg.bank?.beneficiary) {
-    doc.text(`Beneficiary: ${companyCfg.bank.beneficiary}`, margin + 220, footerY + lineHeight);
+  const bank = invoice.billFrom?.bank || companyCfg.bank;
+  doc.text(`IBAN: ${bank?.iban || ''}`, margin, footerY + lineHeight * 2);
+  doc.text(`SWIFT: ${bank?.swift || ''}`, margin + 220, footerY + lineHeight * 2);
+  if (bank?.beneficiary) {
+    doc.text(`Beneficiary: ${bank.beneficiary}`, margin + 220, footerY + lineHeight);
   }
 
   const detailsY = footerY + payableHeight + 8;
@@ -172,9 +174,29 @@ export async function generateInvoicePdfBlob(invoice, companyOverride) {
 }
 
 function formatMoney(amount, currency) {
-  return new Intl.NumberFormat('en', {
+  const value = Number(amount) || 0;
+  const nf = new Intl.NumberFormat('en', {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
-  }).format(amount || 0);
+  });
+  try {
+    const parts = nf.formatToParts(value);
+    let out = '';
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (p.type === 'currency') {
+        const next = parts[i + 1];
+        const needsSpace =
+          next && (next.type === 'integer' || next.type === 'group' || next.type === 'minusSign' || next.type === 'plusSign');
+        out += p.value + (needsSpace ? ' ' : '');
+      } else {
+        out += p.value;
+      }
+    }
+    return out;
+  } catch {
+    const formatted = nf.format(value);
+    return formatted.replace(/^([^\d\s])(?=\d)/, '$1 ');
+  }
 }

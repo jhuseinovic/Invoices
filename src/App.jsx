@@ -320,6 +320,7 @@ function App() {
                 taxRate: inv.taxRate,
                 notes: inv.notes,
                 status: inv.status,
+                billFrom: inv.billFrom,
                 summary: {
                   subtotal: inv.subtotal,
                   taxAmount: inv.taxAmount,
@@ -361,6 +362,7 @@ function App() {
                 taxRate: inv.taxRate,
                 notes: inv.notes,
                 status: inv.status,
+                billFrom: inv.billFrom,
                 summary: {
                   subtotal: inv.subtotal,
                   taxAmount: inv.taxAmount,
@@ -419,6 +421,7 @@ function App() {
                 taxRate: inv.taxRate,
                 notes: inv.notes,
                 status: inv.status,
+                billFrom: inv.billFrom,
                 summary: {
                   subtotal: inv.subtotal,
                   taxAmount: inv.taxAmount,
@@ -439,6 +442,7 @@ function App() {
           saving={saving}
           customerOptions={customerOptions}
           initialInvoice={draftInvoice}
+          companyProfiles={company?.profiles || []}
         />
       )}
 
@@ -604,6 +608,7 @@ function buildSheetRow(invoice) {
     JSON.stringify(invoice.items),
     invoice.notes,
     invoice.status === 'Paid' ? new Date().toISOString().slice(0, 10) : '',
+    JSON.stringify(invoice.billFrom || {}),
   ];
 }
 

@@ -5,12 +5,13 @@ import './InvoiceForm.css';
 
 const EMPTY_ITEM = { description: '', quantity: 1, rate: 0 };
 
-export default function InvoiceForm({ onSubmit, saving, customerOptions, initialInvoice }) {
+export default function InvoiceForm({ onSubmit, saving, customerOptions, initialInvoice, companyProfiles }) {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [issueDate, setIssueDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [dueDate, setDueDate] = useState(dayjs().add(14, 'day').format('YYYY-MM-DD'));
   const [currency, setCurrency] = useState(CONFIG.currency);
   const [customer, setCustomer] = useState({ name: '', email: '', address: '' });
+  const [billFromAlias, setBillFromAlias] = useState('');
 
   const [items, setItems] = useState([{ ...EMPTY_ITEM }]);
   const [taxRate, setTaxRate] = useState(0);
@@ -30,6 +31,9 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
     );
     setNotes(initialInvoice.notes || '');
     setStatus(initialInvoice.status || 'Draft');
+    if (initialInvoice.billFrom?.alias) {
+      setBillFromAlias(initialInvoice.billFrom.alias);
+    }
   }, [initialInvoice]);
 
   useEffect(() => {
@@ -68,6 +72,22 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
     if (match) setCustomer({ ...match });
   }
 
+  function resolveBillFrom() {
+    const list = Array.isArray(companyProfiles) ? companyProfiles : [];
+    const match = list.find((p) => p.alias === billFromAlias) || list[0];
+    if (!match) return null;
+    return {
+      key: match.key,
+      alias: match.alias || '',
+      bankName: match.bankName || '',
+      bank: {
+        iban: match.bank?.iban || '',
+        swift: match.bank?.swift || '',
+        beneficiary: match.bank?.beneficiary || '',
+      },
+    };
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     const payload = {
@@ -80,6 +100,7 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
       taxRate: Number(taxRate) || 0,
       notes,
       status,
+      billFrom: resolveBillFrom(),
       summary: {
         subtotal,
         taxAmount,
@@ -103,6 +124,20 @@ export default function InvoiceForm({ onSubmit, saving, customerOptions, initial
           <h2>Invoice Details</h2>
         </header>
         <div className="grid two invoice-details">
+          <label>
+            Bill From Profile
+            <select value={billFromAlias} onChange={(e) => setBillFromAlias(e.target.value)}>
+              {Array.isArray(companyProfiles) && companyProfiles.length ? (
+                companyProfiles.map((p) => (
+                  <option key={p.key} value={p.alias || ''}>
+                    {p.alias || p.bankName || p.key}
+                  </option>
+                ))
+              ) : (
+                <option value="">Default</option>
+              )}
+            </select>
+          </label>
           <label>
             Invoice #
             <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} required />

@@ -18,12 +18,19 @@ export function parseSheetRows(rows) {
       itemsJson,
       notes,
       paidDate,
+      billFromJson,
     ] = row;
     let items = [];
     try {
       items = itemsJson ? JSON.parse(itemsJson) : [];
     } catch {
       items = [];
+    }
+    let billFrom = null;
+    try {
+      billFrom = billFromJson ? JSON.parse(billFromJson) : null;
+    } catch {
+      billFrom = null;
     }
     return {
       __rowIndex: idx + 2,
@@ -45,6 +52,7 @@ export function parseSheetRows(rows) {
       items: Array.isArray(items) ? items : [],
       notes: notes || '',
       paidDate: paidDate || '',
+      billFrom: billFrom || null,
     };
   });
 }
